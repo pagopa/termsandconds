@@ -1,4 +1,4 @@
-# Multi-channel Integration Layer Terms and Conditions
+# Multi-channel Integration Layer - Terms and Conditions
 Terms and Condition Microservice for Multi-channel Integration Layer of SW Client Project.
 
 ## Dependencies
