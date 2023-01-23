@@ -27,7 +27,7 @@
 		
 		<skipITs>true</skipITs>
 		
-		<common.version>1.0.3</common.version>
+		<common.version>1.1.5</common.version>
 	</properties>
 	
 	<dependencyManagement>
