@@ -105,10 +105,10 @@ public class TermAndCondsResource {
 	
 	@POST
 	@Consumes(MediaType.APPLICATION_JSON)
-	public Uni<Response> postTermsAndConds(@Valid @BeanParam TCHeaderParams headers) {
-		Log.debugf("postTermsAndConds - Input parameters: %s", headers);
+	public Uni<Response> acceptedTermsAndConds(@Valid @BeanParam TCHeaderParams headers) {
+		Log.debugf("acceptedTermsAndConds - Input parameters: %s", headers);
 		
-		Log.debugf("postTermsAndConds - call session service with session id= %s", headers.getSessionId());
+		Log.debugf("acceptedTermsAndConds - call session service with session id= %s", headers.getSessionId());
 		return sessionService.getSessionById(headers.getSessionId(), headers)
 			.onFailure().transform(f -> {
 				if (f instanceof ClientWebApplicationException c) {
@@ -136,14 +136,17 @@ public class TermAndCondsResource {
 	
 	}
 	
+	/**
+	 * Call the PDV-Tokenizer passing the tax code as body and manage the response getting the tax code token
+	 * @param taxCode
+	 * @return tax code token or error
+	 */
 	private Uni<Tuple2<TokenResponse,String>> manageTokenResponse(String taxCode) {
 		
 		TokenBody tokenBody = new TokenBody();
 		tokenBody.setPii(taxCode);
 		
 		Log.debugf("manageTokenResponse -  taxCode= %s",taxCode);
-		
-		tokenService.getToken(tokenBody);
 		
 		return tokenService.getToken(tokenBody).onFailure().transform(t-> 
 				{
@@ -203,6 +206,11 @@ public class TermAndCondsResource {
 		
 	}
 	
+	/**
+	 * searches the token version by the tax code token and returns if the version is equals or not to the version in the property file
+	 * @param taxCodeToken
+	 * @return true if the version is equals to the one in the property field. False otherwise. Can rise a NotFoundException if no item is found.
+	 */
 	private Uni<Boolean> manageFindVersionByTaxCode(String taxCodeToken) {
 		Log.debugf("manageFindVersionByTaxCode - find version by taxCodeToken: %s ", taxCodeToken);
 		

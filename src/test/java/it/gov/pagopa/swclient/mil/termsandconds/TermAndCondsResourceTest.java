@@ -70,10 +70,7 @@ class TermAndCondsResourceTest {
 		SessionResponse sessionResponse = new SessionResponse();
 		sessionResponse.setTaxCode(TAX_CODE);
 		sessionResponse.setOutcome(OUTCOME);
-		
-//		TokenBody tokenBody = new TokenBody();
-//		tokenBody.setPii(SESSION_ID);
-		
+
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
 		
@@ -266,8 +263,6 @@ class TermAndCondsResourceTest {
 	    
 	}
 	
-	//TODO:test wrong header params
-	
 	// test GET API
 	@Test
 	void testGetTermsAndConds_200() {
@@ -283,7 +278,7 @@ class TermAndCondsResourceTest {
 		Mockito
 		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
 		.thenReturn(Uni.createFrom().item(tokenResponse));
-//		
+
 		Mockito
 		.when(tcRepository.findByIdOptional(Mockito.any(String.class)))
 		.thenReturn(Uni.createFrom().item(Optional.of(tcEntity)));
@@ -310,6 +305,47 @@ class TermAndCondsResourceTest {
 	        Assertions.assertEquals("{\"outcome\":\"OK\"}", response.getBody().asString());
 	     
 	}
+	
+	@Test
+	void testGetTermsAndCondsTcVersionNotEquals_200() {
+		
+		TokenResponse tokenResponse = new TokenResponse();
+		tokenResponse.setToken(TOKEN);
+		
+		TCVersion tcV = new TCVersion();
+		tcV.setVersion("0000");
+		TCEntity tcEntity = new TCEntity();
+		tcEntity.version = tcV;
+
+		Mockito
+		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.thenReturn(Uni.createFrom().item(tokenResponse));
+
+		Mockito
+		.when(tcRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.of(tcEntity)));
+		
+		Response response = given()
+				.contentType(ContentType.JSON)
+				.headers(
+						"RequestId", "d0d654e6-97da-4848-b568-99fedccb642b",
+						"Version", API_VERSION,
+						"AcquirerId", "4585625",
+						"Channel", "ATM",
+						"TerminalId", "0aB9wXyZ",
+						"SessionId", SESSION_ID)
+				.and()
+				.when()
+				.get("/"+TAX_CODE)
+				.then()
+				.extract()
+				.response();
+			
+	        Assertions.assertEquals(404, response.statusCode());
+	        Assertions.assertEquals("{\"outcome\":\"TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED\"}", response.getBody().asString());
+	     
+	}
+	
 	@Test
 	void testGetTermsAndConds_404() {
 		
@@ -347,4 +383,39 @@ class TermAndCondsResourceTest {
 	     
 	}
 
+	
+	@Test
+	void testGetTermsAndConds_500() {
+		
+		TokenResponse tokenResponse = new TokenResponse();
+		tokenResponse.setToken(TOKEN);
+		
+		Mockito
+		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.thenReturn(Uni.createFrom().item(tokenResponse));
+		
+		Mockito
+		.when(tcRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().failure(new InternalServerErrorException()));
+		
+		Response response = given()
+				.contentType(ContentType.JSON)
+				.headers(
+						"RequestId", "d0d654e6-97da-4848-b568-99fedccb642b",
+						"Version", API_VERSION,
+						"AcquirerId", "4585625",
+						"Channel", "ATM",
+						"TerminalId", "0aB9wXyZ",
+						"SessionId", SESSION_ID)
+				.and()
+				.when()
+				.get("/"+TAX_CODE)
+				.then()
+				.extract()
+				.response();
+			
+	        Assertions.assertEquals(500, response.statusCode());
+	        Assertions.assertEquals("{\"errors\":[\"004000007\"]}", response.getBody().asString());
+	     
+	}
 }
