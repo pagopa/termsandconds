@@ -90,7 +90,7 @@
 		<dependency>
 			<groupId>it.gov.pagopa.swclient.mil</groupId>
 			<artifactId>common</artifactId>
-			<version>1.0.3</version>
+			<version>${common.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>io.quarkus</groupId>
