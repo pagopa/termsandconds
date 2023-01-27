@@ -25,6 +25,10 @@ public class TCHeaderParams extends CommonHeader{
 	public void setSessionId(String sessionId) {
 		this.sessionId = sessionId;
 	}
-	
+
+	@Override
+	public String toString() {
+		return super.toString() + "TCHeaderParams [sessionId=" + sessionId + "]";
+	}
 	
 }

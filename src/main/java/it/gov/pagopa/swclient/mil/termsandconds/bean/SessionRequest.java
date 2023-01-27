@@ -1,5 +1,8 @@
 package it.gov.pagopa.swclient.mil.termsandconds.bean;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
+
+@RegisterForReflection
 public class SessionRequest {
 	private boolean termsAndCondsAccepted;	
 	private boolean saveNewcards;
