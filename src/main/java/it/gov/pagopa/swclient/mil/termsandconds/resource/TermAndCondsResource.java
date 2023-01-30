@@ -111,8 +111,8 @@ public class TermAndCondsResource {
 		Log.debugf("acceptedTermsAndConds - call session service with session id= %s", headers.getSessionId());
 		return sessionService.getSessionById(headers.getSessionId(), headers)
 			.onFailure().transform(f -> {
-				if (f instanceof ClientWebApplicationException c) {
-					Log.errorf(f, "[%s] Error while retrieving terms and condition session Http Status code [%s] " , ErrorCode.ERROR_SESSION_NOT_FOUND_SERVICE,c.getResponse().getStatus()) ;
+				if ((f instanceof ClientWebApplicationException exc) && exc.getResponse().getStatus() == 404) {
+					Log.errorf(f, "[%s] Error while retrieving terms and condition session Http Status code [%s] " , ErrorCode.ERROR_SESSION_NOT_FOUND_SERVICE,exc.getResponse().getStatus()) ;
 					return new BadRequestException(Response
 							.status(Status.BAD_REQUEST)
 							.entity(new Errors(List.of(ErrorCode.ERROR_SESSION_NOT_FOUND_SERVICE)))
@@ -130,9 +130,10 @@ public class TermAndCondsResource {
 			.chain(c -> saveNewCard(c.getItem2(), headers.getVersion()))
 			.chain(c -> patchSaveNewCard(headers, c))
 //			
-			.map(m -> 
-				Response.status(Status.CREATED).entity(m).build()
-				);
+			.map(m -> {
+				Log.debugf("Response %s",m);
+				return Response.status(Status.CREATED).entity(m).build();
+			});
 	
 	}
 	
@@ -176,11 +177,10 @@ public class TermAndCondsResource {
 	
 	
 	private Uni<SaveNewCardsResponse> saveNewCard(String taxCode,String apiVersion) {
-		
 		Log.debugf("saveNewCard -  taxCode= %s", taxCode);
 		return pmWalletService.saveNewCards(taxCode, apiVersion)
 				.onFailure().recoverWithItem( t -> {
-					Log.errorf(t, "[%s] Error while retrieving terms and condition", ErrorCode.ERROR_CALLING_TOKENIZATOR_SERVICE);
+					Log.errorf(t, "[%s] Error while saving card to pmWallet service", ErrorCode.ERROR_CALLING_TOKENIZATOR_SERVICE);
 					SaveNewCardsResponse response =  new SaveNewCardsResponse();
 					response.setSaveNewCards(false);
 					return response;
@@ -190,18 +190,20 @@ public class TermAndCondsResource {
 	}
 	
 	private Uni<SaveNewCardsResponse> patchSaveNewCard(TCHeaderParams headers,SaveNewCardsResponse res) {
-		
+		Log.debugf("patchSaveNewCard - with saveNewCards %s and heades %s ", headers, res.isSaveNewCards());
 		SessionRequest request = new SessionRequest();
 		request.setSaveNewcards(res.isSaveNewCards());
 		request.setTermsAndCondsAccepted(true);
 		
 		return sessionService.patchSessionById(headers.getSessionId(), headers, request)
-			.onFailure().recoverWithItem( t -> {
-				Log.errorf(t, "[%s] Error while retrieving terms and condition", ErrorCode.ERROR_CALLING_TOKENIZATOR_SERVICE);
-				SaveNewCardsResponse response =  new SaveNewCardsResponse();
-				response.setSaveNewCards(false);
-				return response;
-			} )
+			.onFailure().transform(t-> 
+			{
+				Log.errorf(t, "[%s] Error calling tokenizator service ", ErrorCode.ERROR_SAVING_SESSION_IN_SESSION_SERVICE);
+				return new InternalServerErrorException(Response
+						.status(Status.INTERNAL_SERVER_ERROR)
+						.entity(new Errors(List.of(ErrorCode.ERROR_SAVING_SESSION_IN_SESSION_SERVICE)))
+						.build());
+			})
 			.map(r -> res);
 		
 	}

@@ -1,6 +1,5 @@
 package it.gov.pagopa.swclient.mil.termsandconds;
 
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 
@@ -23,7 +22,7 @@ import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 public class MongoTestResource implements QuarkusTestResourceLifecycleManager,DevServicesContext.ContextAware {
     
 	private static final Logger logger = LoggerFactory.getLogger(MongoTestResource.class);
-    private static final String WIREMOCK_NETWORK_ALIAS = "mongo-it";
+    private static final String MONGO_NETWORK_ALIAS = "mongo-it";
 
     private GenericContainer<?> mongoContainer;
 
@@ -60,7 +59,7 @@ public class MongoTestResource implements QuarkusTestResourceLifecycleManager,De
 
         mongoContainer = new GenericContainer<>(DockerImageName.parse("mongo:latest"))
                 .withNetwork(testNetwork)
-                .withNetworkAliases(WIREMOCK_NETWORK_ALIAS)
+                .withNetworkAliases(MONGO_NETWORK_ALIAS)
                 //.withNetworkMode(devServicesContext.containerNetworkId().get())
                 .waitingFor(Wait.forListeningPort());
 
@@ -89,7 +88,7 @@ public class MongoTestResource implements QuarkusTestResourceLifecycleManager,De
 		
 		Map<String, String> map = ImmutableMap.of(
 					"termsconds-version","1",
-	                "quarkus.mongodb.connection-string","mongodb://" + WIREMOCK_NETWORK_ALIAS + ":" + 27017
+	                "quarkus.mongodb.connection-string","mongodb://" + MONGO_NETWORK_ALIAS + ":" + 27017
 	                
 	        );
 		

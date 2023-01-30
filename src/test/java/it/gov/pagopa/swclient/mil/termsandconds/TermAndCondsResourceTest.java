@@ -179,7 +179,7 @@ class TermAndCondsResourceTest {
 	}
 	
 	@Test
-	void testManageOutcomeResponse_InternalServerError500() {
+	void testManageOutcomeResponseCallingTokenizatorService_InternalServerError500() {
 		SessionResponse sessionResponse = new SessionResponse();
 		sessionResponse.setTaxCode(TAX_CODE);
 		sessionResponse.setOutcome(OUTCOME);
@@ -239,7 +239,7 @@ class TermAndCondsResourceTest {
 		
 		Mockito
 		.when(pmWalletService.saveNewCards(TAX_CODE, API_VERSION))
-		.thenReturn(Uni.createFrom().failure(new InternalServerErrorException()));
+		.thenReturn(Uni.createFrom().failure(new ClientWebApplicationException(500)));
 		
 		Response response = given()
 				.contentType(ContentType.JSON)
