@@ -13,11 +13,4 @@ public class TokenBody {
 	public void setPii(String pii) {
 		this.pii = pii;
 	}
-	@Override
-	public String toString() {
-		StringBuilder builder = new StringBuilder();
-		builder .append("TokenBody response [pii=").append(pii)
-				.append("]");
-		return builder.toString();
-	}
 }

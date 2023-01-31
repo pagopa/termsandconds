@@ -16,4 +16,6 @@ db.termsconds.insertMany([
 			}
 		])
 		
+db.termscondsversion.insertOne({ _id: "tcVersion",	version: "1"})
+
 printjson( db.termsconds.find( {} ) );

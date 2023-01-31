@@ -11,9 +11,14 @@ public class SaveNewCardsResponse {
 	public void setSaveNewCards(boolean saveNewCards) {
 		this.saveNewCards = saveNewCards;
 	}
-	
+
 	@Override
 	public String toString() {
-		return "SaveNewCards [saveNewCards=" + saveNewCards + "]";
+		StringBuilder builder = new StringBuilder();
+		builder.append("SaveNewCardsResponse [saveNewCards=");
+		builder.append(saveNewCards);
+		builder.append("]");
+		return builder.toString();
 	}
+	
 }

@@ -13,6 +13,14 @@ public class TCEntity {
 	@BsonId
 	public String taxCodeToken;
 	
-	public TCVersion version;
+	private TCVersion version;
+
+	public TCVersion getVersion() {
+		return version;
+	}
+
+	public void setVersion(TCVersion version) {
+		this.version = version;
+	}
 	
 }

@@ -1,4 +1,4 @@
-package it.gov.pagopa.swclient.mil.termsandconds.resource;
+package it.gov.pagopa.swclient.mil.termsandconds.client;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.HeaderParam;

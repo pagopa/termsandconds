@@ -6,7 +6,6 @@ import java.util.Optional;
 
 import javax.ws.rs.InternalServerErrorException;
 
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.resteasy.reactive.ClientWebApplicationException;
 import org.junit.jupiter.api.Assertions;
@@ -27,12 +26,14 @@ import it.gov.pagopa.swclient.mil.termsandconds.bean.SessionResponse;
 import it.gov.pagopa.swclient.mil.termsandconds.bean.TCVersion;
 import it.gov.pagopa.swclient.mil.termsandconds.bean.TokenBody;
 import it.gov.pagopa.swclient.mil.termsandconds.bean.TokenResponse;
+import it.gov.pagopa.swclient.mil.termsandconds.client.PmWalletService;
+import it.gov.pagopa.swclient.mil.termsandconds.client.SessionService;
+import it.gov.pagopa.swclient.mil.termsandconds.client.TokensService;
 import it.gov.pagopa.swclient.mil.termsandconds.dao.TCEntity;
+import it.gov.pagopa.swclient.mil.termsandconds.dao.TCEntityVersion;
 import it.gov.pagopa.swclient.mil.termsandconds.dao.TCRepository;
-import it.gov.pagopa.swclient.mil.termsandconds.resource.PmWalletService;
-import it.gov.pagopa.swclient.mil.termsandconds.resource.SessionService;
+import it.gov.pagopa.swclient.mil.termsandconds.dao.TCVersionRepository;
 import it.gov.pagopa.swclient.mil.termsandconds.resource.TermAndCondsResource;
-import it.gov.pagopa.swclient.mil.termsandconds.resource.TokensService;
 
 @QuarkusTest
 @TestHTTPEndpoint(TermAndCondsResource.class)
@@ -58,11 +59,12 @@ class TermAndCondsResourceTest {
 	private TCRepository tcRepository;
 	
 	@InjectMock
+	private TCVersionRepository tcVersionRepository;
+	
+	@InjectMock
 	@RestClient
 	private PmWalletService pmWalletService;
 	
-	@ConfigProperty(name="terms.conds")
-	private String tcVersion;
 	
 	// test POST API
 	@Test
@@ -79,6 +81,8 @@ class TermAndCondsResourceTest {
 		SaveNewCardsResponse saveNewCardsResponse = new SaveNewCardsResponse();
 		saveNewCardsResponse.setSaveNewCards(true);
 		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
 		
 		Mockito
 		.when(sessionService.getSessionById(Mockito.eq(SESSION_ID), Mockito.any(CommonHeader.class)))
@@ -91,6 +95,10 @@ class TermAndCondsResourceTest {
 		Mockito
 		.when(tcRepository.persistOrUpdate(Mockito.any(TCEntity.class)))
 		.thenReturn(Uni.createFrom().item(tcEntity));
+		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.of(tcEntityVersion)));
 		
 		Mockito
 		.when(pmWalletService.saveNewCards(TAX_CODE, API_VERSION))
@@ -225,6 +233,9 @@ class TermAndCondsResourceTest {
 		
 		TCEntity tcEntity = new TCEntity();
 		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
+		
 		Mockito
 		.when(sessionService.getSessionById(Mockito.eq(SESSION_ID), Mockito.any(CommonHeader.class)))
 		.thenReturn(Uni.createFrom().item(sessionResponse));
@@ -236,6 +247,10 @@ class TermAndCondsResourceTest {
 		Mockito
 		.when(tcRepository.persistOrUpdate(Mockito.any(TCEntity.class)))
 		.thenReturn(Uni.createFrom().item(tcEntity));
+		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.of(tcEntityVersion)));
 		
 		Mockito
 		.when(pmWalletService.saveNewCards(TAX_CODE, API_VERSION))
@@ -270,10 +285,13 @@ class TermAndCondsResourceTest {
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
 		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
+		
 		TCVersion tcV = new TCVersion();
-		tcV.setVersion(tcVersion);
+		tcV.setVersion("1");
 		TCEntity tcEntity = new TCEntity();
-		tcEntity.version = tcV;
+		tcEntity.setVersion(tcV);
 
 		Mockito
 		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
@@ -283,7 +301,9 @@ class TermAndCondsResourceTest {
 		.when(tcRepository.findByIdOptional(Mockito.any(String.class)))
 		.thenReturn(Uni.createFrom().item(Optional.of(tcEntity)));
 		
-		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.of(tcEntityVersion)));
 		
 		Response response = given()
 				.contentType(ContentType.JSON)
@@ -312,10 +332,13 @@ class TermAndCondsResourceTest {
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
 		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
+		
 		TCVersion tcV = new TCVersion();
 		tcV.setVersion("0000");
 		TCEntity tcEntity = new TCEntity();
-		tcEntity.version = tcV;
+		tcEntity.setVersion(tcV);
 
 		Mockito
 		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
@@ -324,6 +347,11 @@ class TermAndCondsResourceTest {
 		Mockito
 		.when(tcRepository.findByIdOptional(Mockito.any(String.class)))
 		.thenReturn(Uni.createFrom().item(Optional.of(tcEntity)));
+		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.of(tcEntityVersion)));
+		
 		
 		Response response = given()
 				.contentType(ContentType.JSON)
@@ -352,6 +380,9 @@ class TermAndCondsResourceTest {
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
 		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
+		
 		Mockito
 		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
 		.thenReturn(Uni.createFrom().item(tokenResponse));
@@ -360,7 +391,9 @@ class TermAndCondsResourceTest {
 		.when(tcRepository.findByIdOptional(Mockito.any(String.class)))
 		.thenReturn(Uni.createFrom().item(Optional.empty()));
 		
-		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.of(tcEntityVersion)));
 		
 		Response response = given()
 				.contentType(ContentType.JSON)
@@ -382,13 +415,15 @@ class TermAndCondsResourceTest {
 	        Assertions.assertEquals("{\"errors\":[\"004000006\"]}", response.getBody().asString());
 	     
 	}
-
 	
 	@Test
 	void testGetTermsAndConds_500() {
 		
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
+		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
 		
 		Mockito
 		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
@@ -397,6 +432,10 @@ class TermAndCondsResourceTest {
 		Mockito
 		.when(tcRepository.findByIdOptional(Mockito.any(String.class)))
 		.thenReturn(Uni.createFrom().failure(new InternalServerErrorException()));
+		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.of(tcEntityVersion)));
 		
 		Response response = given()
 				.contentType(ContentType.JSON)
@@ -417,5 +456,5 @@ class TermAndCondsResourceTest {
 	        Assertions.assertEquals(500, response.statusCode());
 	        Assertions.assertEquals("{\"errors\":[\"004000007\"]}", response.getBody().asString());
 	     
-	}
+	} 
 }

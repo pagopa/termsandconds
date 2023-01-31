@@ -28,6 +28,7 @@ public final class ErrorCode {
 	public static final String ERROR_VERSION_SERVICE					= MODULE_ID + "000007";
 	
 	public static final String ERROR_SAVING_SESSION_IN_SESSION_SERVICE	= MODULE_ID + "000008";
+	public static final String ERROR_TIMEOUT_MONGO_DB					= MODULE_ID + "000009";
 
 	private ErrorCode() {
 		

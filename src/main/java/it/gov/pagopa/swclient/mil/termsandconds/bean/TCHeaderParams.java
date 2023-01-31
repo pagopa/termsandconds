@@ -28,7 +28,11 @@ public class TCHeaderParams extends CommonHeader{
 
 	@Override
 	public String toString() {
-		return super.toString() + "TCHeaderParams [sessionId=" + sessionId + "]";
+		StringBuilder builder = new StringBuilder();
+		builder.append("TCHeaderParams [sessionId=");
+		builder.append(sessionId);
+		builder.append("]");
+		return builder.toString();
 	}
-	
+
 }

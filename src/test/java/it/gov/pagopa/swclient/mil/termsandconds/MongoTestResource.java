@@ -74,6 +74,7 @@ public class MongoTestResource implements QuarkusTestResourceLifecycleManager,De
 			
 
 			ExecResult result = mongoContainer.execInContainer("mongosh", "<", "/home/mongo/mongoInit.js");
+			
 			logger.info("----------------------script executed {} ----------------------",result);
 			
 
