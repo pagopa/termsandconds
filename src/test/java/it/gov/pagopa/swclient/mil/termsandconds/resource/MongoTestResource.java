@@ -1,4 +1,4 @@
-package it.gov.pagopa.swclient.mil.termsandconds;
+package it.gov.pagopa.swclient.mil.termsandconds.resource;
 
 import java.util.Iterator;
 import java.util.Map;

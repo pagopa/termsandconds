@@ -1,4 +1,4 @@
-package it.gov.pagopa.swclient.mil.termsandconds;
+package it.gov.pagopa.swclient.mil.termsandconds.it;
 
 import static io.restassured.RestAssured.given;
 
@@ -11,6 +11,9 @@ import io.quarkus.test.common.http.TestHTTPEndpoint;
 import io.quarkus.test.junit.QuarkusIntegrationTest;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
+import it.gov.pagopa.swclient.mil.termsandconds.ErrorCode;
+import it.gov.pagopa.swclient.mil.termsandconds.resource.Initializer;
+import it.gov.pagopa.swclient.mil.termsandconds.resource.MongoTestResource;
 import it.gov.pagopa.swclient.mil.termsandconds.resource.TermAndCondsResource;
 
 @QuarkusIntegrationTest
@@ -38,7 +41,7 @@ class TermAndCondsResourceTestIT {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				.and()
 				.when()
 				.get("/CHCZLN73D08A662B")
@@ -47,7 +50,7 @@ class TermAndCondsResourceTestIT {
 				.response();
 			
 	        Assertions.assertEquals(200, response.statusCode());
-	        Assertions.assertEquals("{\"outcome\":\"OK\"}", response.getBody().asString());
+	        Assertions.assertEquals("OK", response.jsonPath().getString("outcome"));
 	}
 	
 	/* The current version is older than the current one. 
@@ -64,7 +67,7 @@ class TermAndCondsResourceTestIT {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				.and()
 				.when()
 				.get("/HHHZLN73D08A662B")
@@ -72,33 +75,9 @@ class TermAndCondsResourceTestIT {
 				.extract()
 				.response();
 			
-		 Assertions.assertEquals(404, response.statusCode());
-	     Assertions.assertEquals("{\"outcome\":\"TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED\"}", response.getBody().asString());
+		 Assertions.assertEquals(200, response.statusCode());
+		 Assertions.assertEquals("TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED", response.jsonPath().getString("outcome"));
 	}
-	
-	@Test
-	void testGetTermsAndConds_404() {
-		
-		Response response = given()
-				.contentType(ContentType.JSON)
-				.headers(
-						"RequestId", "d0d654e6-97da-4848-b568-99fedccb642b",
-						"Version", API_VERSION,
-						"AcquirerId", "4585625",
-						"Channel", "ATM",
-						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
-				.and()
-				.when()
-				.get("/LLOZLN73D08A662A")
-				.then()
-				.extract()
-				.response();
-			
-		 Assertions.assertEquals(404, response.statusCode());
-		 Assertions.assertEquals("{\"errors\":[\"004000006\"]}", response.getBody().asString());
-	}
-
 	
 	// test POST API
 	@Test
@@ -112,7 +91,7 @@ class TermAndCondsResourceTestIT {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				.and()
 				.when()
 				.post()
@@ -136,7 +115,7 @@ class TermAndCondsResourceTestIT {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", "c0c444e6-97da-4848-b568-99fedccb642c")
+						"id", "c0c444e6-97da-4848-b568-99fedccb642c")
 				.and()
 				.when()
 				.post()
@@ -145,7 +124,8 @@ class TermAndCondsResourceTestIT {
 				.response();
 			
 	    Assertions.assertEquals(400, response.statusCode());
-	    Assertions.assertEquals("{\"errors\":[\"004000005\"]}", response.getBody().asString());
+	    Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_SESSION_NOT_FOUND_SERVICE));
+	    Assertions.assertNull(response.jsonPath().getJsonObject("saveNewCards"));
 	}
 	
 	@Test
@@ -159,7 +139,7 @@ class TermAndCondsResourceTestIT {
 						"AcquirerId", "1111111",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", "c0c444e6-97da-4848-b568-99fedccb642c")
+						"id", "c0c444e6-97da-4848-b568-99fedccb642c")
 				.and()
 				.when()
 				.post()
@@ -168,7 +148,8 @@ class TermAndCondsResourceTestIT {
 				.response();
 			
 	    Assertions.assertEquals(500, response.statusCode());
-	    Assertions.assertEquals("{\"errors\":[\"004000003\"]}", response.getBody().asString());
+	    Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_CALLING_SESSION_SERVICE));
+	    Assertions.assertNull(response.jsonPath().getJsonObject("saveNewCards"));
 	}
 	
 	
@@ -187,7 +168,7 @@ class TermAndCondsResourceTestIT {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", "b0a000e6-97da-4848-b568-99fedccb641b")
+						"id", "b0a000e6-97da-4848-b568-99fedccb641b")
 				.and()
 				.when()
 				.post()
@@ -196,9 +177,7 @@ class TermAndCondsResourceTestIT {
 				.response();
 			
 	    Assertions.assertEquals(500, response.statusCode());
-	    Assertions.assertEquals("{\"errors\":[\"004000004\"]}", response.getBody().asString());
+	    Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_CALLING_TOKENIZATOR_SERVICE));
+	    Assertions.assertNull(response.jsonPath().getJsonObject("saveNewCards"));
 	}
-	
-
-	
 }

@@ -32,30 +32,26 @@ import io.smallrye.mutiny.tuples.Tuple2;
 import it.gov.pagopa.swclient.mil.bean.CommonHeader;
 import it.gov.pagopa.swclient.mil.bean.Errors;
 import it.gov.pagopa.swclient.mil.termsandconds.ErrorCode;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.SaveNewCardsResponse;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.SessionRequest;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.SessionResponse;
 import it.gov.pagopa.swclient.mil.termsandconds.bean.TCHeaderParams;
 import it.gov.pagopa.swclient.mil.termsandconds.bean.TCVersion;
 import it.gov.pagopa.swclient.mil.termsandconds.bean.TcPathParam;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.TokenBody;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.TokenResponse;
 import it.gov.pagopa.swclient.mil.termsandconds.client.PmWalletService;
 import it.gov.pagopa.swclient.mil.termsandconds.client.SessionService;
+import it.gov.pagopa.swclient.mil.termsandconds.client.TcResponse;
 import it.gov.pagopa.swclient.mil.termsandconds.client.TokensService;
-import it.gov.pagopa.swclient.mil.termsandconds.dao.TCEntity;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.SaveNewCardsResponse;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.SessionRequest;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.TokenRequest;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.TokenResponse;
 import it.gov.pagopa.swclient.mil.termsandconds.dao.TCEntityVersion;
 import it.gov.pagopa.swclient.mil.termsandconds.dao.TCRepository;
 import it.gov.pagopa.swclient.mil.termsandconds.dao.TCVersionRepository;
+import it.gov.pagopa.swclient.mil.termsandconds.dao.TcTaxCodeTokenEntity;
 
 
 @Path("/acceptedTermsConds")
 public class TermAndCondsResource {
-	
-	/*
-	 * Used to call the Session service to retrieve the 
-	 * taxCode and the termsAndCondsAccepted values
-	 */
+
 	@RestClient
 	private SessionService sessionService;
 	
@@ -71,7 +67,12 @@ public class TermAndCondsResource {
 	@Inject
 	private TCVersionRepository tcVersionRepository;
 	
-	
+	/**
+	 * Check the acceptance of T&C for the user identified by the tax code
+	 * @param headers a set of mandatory headers
+	 * @param pathParams {@link TcPathParam} containing the tax code of the user
+	 * @return the value of the acceptance of T&C as "OK" or "TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED" values
+	 */
 	@GET
 	@Path("/{taxCode}")
 	@Consumes(MediaType.APPLICATION_JSON)
@@ -82,6 +83,11 @@ public class TermAndCondsResource {
 		
 	}
 	
+	/**
+	 * Store the acceptance of T&C for the user identified by the tax code stored in the session
+	 * @param headers headers a set of mandatory headers
+	 * @return true if the client should invoke the presave operation of the Wallet microservice
+	 */
 	@POST
 	@Consumes(MediaType.APPLICATION_JSON)
 	public Uni<Response> acceptedTermsAndConds(@Valid @BeanParam TCHeaderParams headers) {
@@ -91,20 +97,23 @@ public class TermAndCondsResource {
 		return sessionService.getSessionById(headers.getSessionId(), headers)
 			.onFailure().transform(f -> {
 				if ((f instanceof ClientWebApplicationException exc) && exc.getResponse().getStatus() == 404) {
-					Log.errorf(f, "[%s] Error while retrieving terms and condition session Http Status code [%s] " , ErrorCode.ERROR_SESSION_NOT_FOUND_SERVICE,exc.getResponse().getStatus()) ;
+					Log.errorf(f, "[%s] Error session not found" , ErrorCode.ERROR_SESSION_NOT_FOUND_SERVICE,exc.getResponse().getStatus()) ;
 					return new BadRequestException(Response
 							.status(Status.BAD_REQUEST)
 							.entity(new Errors(List.of(ErrorCode.ERROR_SESSION_NOT_FOUND_SERVICE)))
 							.build());
 				} else {
-					Log.errorf(f, "[%s] Error while retrieving terms and condition session ", ErrorCode.ERROR_CALLING_SESSION_SERVICE);
+					Log.errorf(f, "[%s] Error while retrieving session by Id ", ErrorCode.ERROR_CALLING_SESSION_SERVICE);
 					return new InternalServerErrorException(Response
 						.status(Status.INTERNAL_SERVER_ERROR)
 						.entity(new Errors(List.of(ErrorCode.ERROR_CALLING_SESSION_SERVICE)))
 						.build());
 				}
 			})
-			.chain(c ->manageTokenResponse(c.getTaxCode()))
+			.chain(c -> {
+				Log.debugf("acceptedTermsAndConds - Session Response %s", c.toString());
+				return manageTokenResponse(c.getTaxCode());
+			})
 			.call(save -> manageUpinsert(save.getItem1().getToken()))
 			.chain(c -> saveNewCard(c.getItem2(), headers.getVersion()))
 			.chain(c -> patchSaveNewCard(headers, c))
@@ -117,15 +126,15 @@ public class TermAndCondsResource {
 	
 	/**
 	 * Call the PDV-Tokenizer passing the tax code as body and manage the response getting the tax code token
-	 * @param taxCode
+	 * @param taxCode of the user
 	 * @return tax code token or error
 	 */
 	private Uni<Tuple2<TokenResponse,String>> manageTokenResponse(String taxCode) {
 		
-		TokenBody tokenBody = new TokenBody();
-		tokenBody.setPii(taxCode);
+		TokenRequest tokenRequest = new TokenRequest();
+		tokenRequest.setPii(taxCode);
 		
-		return tokenService.getToken(tokenBody).onFailure().transform(t-> 
+		return tokenService.getToken(tokenRequest).onFailure().transform(t-> 
 				{
 					Log.errorf("[%s] Error calling tokenizator service ", ErrorCode.ERROR_CALLING_TOKENIZATOR_SERVICE);
 					return new InternalServerErrorException(Response
@@ -135,16 +144,21 @@ public class TermAndCondsResource {
 				})
 				.map(token -> Tuple2.of(token, taxCode));
 	}
-		
-	private Uni<TCEntity> manageUpinsert(final String taxCodeToken) {
+	
+	/**
+	 * saves or update the T&C
+	 * @param taxCodeToken: token returned by the PDV-Tokenizer service
+	 * @return the saved value
+	 */
+	private Uni<TcTaxCodeTokenEntity> manageUpinsert(final String taxCodeToken) {
 		
 		return retrieveVersion().map(v -> {
-			TCEntity entity 	= new TCEntity();
+			TcTaxCodeTokenEntity entity 	= new TcTaxCodeTokenEntity();
 			entity.taxCodeToken = taxCodeToken;
 			
 			TCVersion tcVersionObj	= new TCVersion();
 			tcVersionObj.setVersion(v);
-			
+			Log.debugf("manageUpinsert - Value of TCVersion to save %s", tcVersionObj.toString());
 			entity.setVersion(tcVersionObj);
 			Log.debugf("manageUpinsert - version= %s ", v);
 			return tcRepository.persistOrUpdate(entity);
@@ -153,30 +167,44 @@ public class TermAndCondsResource {
 		
 	}
 	
-	
+	/**
+	 * Call the PM-Wallet saveNewCard API
+	 * @param taxCode of the user
+	 * @param apiVersion
+	 * @return the value to know if the client should invoke the presave operation of the Wallet microservice
+	 */
 	private Uni<SaveNewCardsResponse> saveNewCard(String taxCode,String apiVersion) {
-		Log.debugf("saveNewCard");
+		Log.debugf("saveNewCard - Calling saveNewCard API ");
 		return pmWalletService.saveNewCards(taxCode, apiVersion)
 				.onFailure().recoverWithItem( t -> {
-					Log.errorf(t, "[%s] Error while saving card to pmWallet service", ErrorCode.ERROR_CALLING_TOKENIZATOR_SERVICE);
+					Log.errorf(t, "[%s] Error while calling saveNewCard API to pmWallet service", ErrorCode.ERROR_CALLING_PW_WALLET_SERVICE);
 					SaveNewCardsResponse response =  new SaveNewCardsResponse();
 					response.setSaveNewCards(false);
 					return response;
 				} )
-				.map(token -> token );
+				.map(token -> {
+					Log.debugf("saveNewCard API responded with [%s]", token);
+					return token;	
+				} );
 		
 	}
 	
+	/**
+	 * Call the session service to update partially a session by ID
+	 * @param headers
+	 * @param res
+	 * @return
+	 */
 	private Uni<SaveNewCardsResponse> patchSaveNewCard(TCHeaderParams headers,SaveNewCardsResponse res) {
 		Log.debugf("patchSaveNewCard - with saveNewCards %s and heades %s ", headers, res.isSaveNewCards());
 		SessionRequest request = new SessionRequest();
 		request.setSaveNewcards(res.isSaveNewCards());
 		request.setTermsAndCondsAccepted(true);
-		
+		Log.debugf("patchSaveNewCard - Calling session service with request %s", request.toString());
 		return sessionService.patchSessionById(headers.getSessionId(), headers, request)
 			.onFailure().transform(t-> 
 			{
-				Log.errorf(t, "[%s] Error calling session service ", ErrorCode.ERROR_SAVING_SESSION_IN_SESSION_SERVICE);
+				Log.errorf(t, "[%s] Error calling session service to save session ", ErrorCode.ERROR_SAVING_SESSION_IN_SESSION_SERVICE);
 				return new InternalServerErrorException(Response
 						.status(Status.INTERNAL_SERVER_ERROR)
 						.entity(new Errors(List.of(ErrorCode.ERROR_SAVING_SESSION_IN_SESSION_SERVICE)))
@@ -187,15 +215,15 @@ public class TermAndCondsResource {
 	}
 	
 	/**
-	 * searches the token version by the tax code token and returns if the version is equals or not to the version in the property file
-	 * @param taxCodeToken
-	 * @return true if the version is equals to the one in the property field. False otherwise. Can rise a NotFoundException if no item is found.
+	 * Checks the version retrieving it by the tax code token and T&C version
+	 * @param taxCodeToken token returned by the PDV-Tokenizer service
+	 * @param tcVersion T&C version
+	 * @return  true if the current version is equals to older one. False otherwise.
 	 */
 	private Uni<Boolean> manageFindVersionByTaxCode(String taxCodeToken, String tcVersion) {
 		Log.debugf("manageFindVersionByTaxCode - find version by taxCodeToken: [%s] ", taxCodeToken);
 		
-		
-		 return tcRepository.findByIdOptional(taxCodeToken)
+		return tcRepository.findByIdOptional(taxCodeToken)
 				 .onItem().transform(o -> o.orElseThrow(() -> 
 				 			new NotFoundException(Response
 								.status(Status.NOT_FOUND)
@@ -206,16 +234,16 @@ public class TermAndCondsResource {
 	
 	private Uni<String> retrieveVersion() {
 		Log.debugf("Retrieve version from DB");
-		 return tcVersionRepository.findByIdOptional("tcVersion")
+		return tcVersionRepository.findByIdOptional("tcVersion")
 				 .onFailure().transform(t->
 							{ 
 								String errorCode = "";
 								if (t instanceof MongoSocketReadTimeoutException) {
-									Log.errorf(t, "[%s] Error calling tokenizator service, Mongo Read Timeout ", ErrorCode.ERROR_TIMEOUT_MONGO_DB);
+									Log.errorf(t, "[%s] Error retrieving T&C version, Mongo Read Timeout ", ErrorCode.ERROR_TIMEOUT_MONGO_DB);
 									errorCode = ErrorCode.ERROR_TIMEOUT_MONGO_DB;
 								} else {
-									Log.errorf(t, "[%s] Error calling tokenizator service ", ErrorCode.ERROR_SAVING_SESSION_IN_SESSION_SERVICE);
-									errorCode = ErrorCode.ERROR_SAVING_SESSION_IN_SESSION_SERVICE;
+									Log.errorf(t, "[%s] Error retrieving T&C version ", ErrorCode.ERROR_RETRIEVING_TC_VERSION);
+									errorCode = ErrorCode.ERROR_RETRIEVING_TC_VERSION;
 								}
 								return new InternalServerErrorException(Response
 										.status(Status.INTERNAL_SERVER_ERROR)
@@ -230,20 +258,26 @@ public class TermAndCondsResource {
 				 	})).map(TCEntityVersion::getVersion);
 	}
 	
-	
+	/**
+	 * Retrieves the tokens calling the PDV-Tokenizer service passing the tax code of the user.
+	 * Checks if the terms and condition version is older than the current one. 
+	 * @param pathParams
+	 * @param version
+	 * @return the value of the acceptance of T&C as "OK" or "TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED" values
+	 */
 	private Uni<Response> manageGetTermsAndConditions(TcPathParam pathParams, String version) {
 		return manageTokenResponse(pathParams.getTaxCode())
 				.chain(f -> manageFindVersionByTaxCode(f.getItem1().getToken(),version))
 				.onFailure().transform(t-> 
 				{
 					if (t instanceof NotFoundException) {
-					Log.errorf(t, "Version not found in the DB");
-					return new NotFoundException(Response
-							.status(Status.NOT_FOUND)
-							.entity(new Errors(List.of(ErrorCode.ERROR_VERSION_NOT_FOUND_SERVICE)))
-							.build());
+						Log.errorf(t, "Version not found in the DB");
+						return new NotFoundException(Response
+								.status(Status.NOT_FOUND)
+								.entity(new Errors(List.of(ErrorCode.ERROR_VERSION_NOT_FOUND_SERVICE)))
+								.build());
 					} else {
-						Log.errorf(t, "[%s] Internal server errorError calling tokenizator service ", ErrorCode.ERROR_VERSION_SERVICE);
+						Log.errorf(t, "[%s] Error retrieving version ", ErrorCode.ERROR_VERSION_SERVICE);
 						return new InternalServerErrorException(Response
 								.status(Status.INTERNAL_SERVER_ERROR)
 								.entity(new Errors(List.of(ErrorCode.ERROR_VERSION_SERVICE)))
@@ -251,16 +285,18 @@ public class TermAndCondsResource {
 					}
 				})
 				.map(r -> {
-					SessionResponse sessionResponse = new SessionResponse();
+					TcResponse tcResponse = new TcResponse();
 					if (r == Boolean.TRUE) {
-						sessionResponse.setOutcome("OK");
-						return Response.status(Status.OK).entity(sessionResponse).build();
+						Log.debugf("The current T&C is the same of the older one", 0);
+						tcResponse.setOutcome("OK");
+						Log.debugf("getTermsAndConds response %s", tcResponse.toString());
+						return Response.status(Status.OK).entity(tcResponse).build();
 					} else {
-						sessionResponse.setOutcome("TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED");	
-						return Response.status(Status.NOT_FOUND).entity(sessionResponse).build();
+						Log.debugf("The current T&C is not the same of the older one", 0);
+						tcResponse.setOutcome("TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED");
+						Log.debugf("getTermsAndConds response %s", tcResponse.toString());
+						return Response.status(Status.OK).entity(tcResponse).build();
 					}
-					
 				} );
 	}
-
 }

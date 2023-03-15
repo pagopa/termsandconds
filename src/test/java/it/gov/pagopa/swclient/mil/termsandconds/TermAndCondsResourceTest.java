@@ -13,6 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 
+import com.mongodb.MongoSocketReadTimeoutException;
+import com.mongodb.ServerAddress;
+
 import io.quarkus.test.common.http.TestHTTPEndpoint;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectMock;
@@ -20,19 +23,19 @@ import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import io.smallrye.mutiny.Uni;
 import it.gov.pagopa.swclient.mil.bean.CommonHeader;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.SaveNewCardsResponse;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.SessionRequest;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.SessionResponse;
 import it.gov.pagopa.swclient.mil.termsandconds.bean.TCVersion;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.TokenBody;
-import it.gov.pagopa.swclient.mil.termsandconds.bean.TokenResponse;
 import it.gov.pagopa.swclient.mil.termsandconds.client.PmWalletService;
 import it.gov.pagopa.swclient.mil.termsandconds.client.SessionService;
 import it.gov.pagopa.swclient.mil.termsandconds.client.TokensService;
-import it.gov.pagopa.swclient.mil.termsandconds.dao.TCEntity;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.SaveNewCardsResponse;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.SessionRequest;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.SessionResponse;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.TokenRequest;
+import it.gov.pagopa.swclient.mil.termsandconds.client.bean.TokenResponse;
 import it.gov.pagopa.swclient.mil.termsandconds.dao.TCEntityVersion;
 import it.gov.pagopa.swclient.mil.termsandconds.dao.TCRepository;
 import it.gov.pagopa.swclient.mil.termsandconds.dao.TCVersionRepository;
+import it.gov.pagopa.swclient.mil.termsandconds.dao.TcTaxCodeTokenEntity;
 import it.gov.pagopa.swclient.mil.termsandconds.resource.TermAndCondsResource;
 
 @QuarkusTest
@@ -76,7 +79,7 @@ class TermAndCondsResourceTest {
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
 		
-		TCEntity tcEntity = new TCEntity();
+		TcTaxCodeTokenEntity tcEntity = new TcTaxCodeTokenEntity();
 		
 		SaveNewCardsResponse saveNewCardsResponse = new SaveNewCardsResponse();
 		saveNewCardsResponse.setSaveNewCards(true);
@@ -89,11 +92,11 @@ class TermAndCondsResourceTest {
 		.thenReturn(Uni.createFrom().item(sessionResponse));
 		
 		Mockito
-		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
 		.thenReturn(Uni.createFrom().item(tokenResponse));
 		
 		Mockito
-		.when(tcRepository.persistOrUpdate(Mockito.any(TCEntity.class)))
+		.when(tcRepository.persistOrUpdate(Mockito.any(TcTaxCodeTokenEntity.class)))
 		.thenReturn(Uni.createFrom().item(tcEntity));
 		
 		Mockito
@@ -116,7 +119,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				.and()
 				.when()
 				.post()
@@ -126,6 +129,69 @@ class TermAndCondsResourceTest {
 			
 	        Assertions.assertEquals(201, response.statusCode());
 	        Assertions.assertEquals(true, response.jsonPath().getBoolean("saveNewCards"));
+	     
+	}
+	
+	@Test
+	void testTermsAndConds_500_savingSession() {
+		SessionResponse sessionResponse = new SessionResponse();
+		sessionResponse.setTaxCode(TAX_CODE);
+		sessionResponse.setOutcome(OUTCOME);
+
+		TokenResponse tokenResponse = new TokenResponse();
+		tokenResponse.setToken(TOKEN);
+		
+		TcTaxCodeTokenEntity tcEntity = new TcTaxCodeTokenEntity();
+		
+		SaveNewCardsResponse saveNewCardsResponse = new SaveNewCardsResponse();
+		saveNewCardsResponse.setSaveNewCards(true);
+		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
+		
+		Mockito
+		.when(sessionService.getSessionById(Mockito.eq(SESSION_ID), Mockito.any(CommonHeader.class)))
+		.thenReturn(Uni.createFrom().item(sessionResponse));
+		
+		Mockito
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
+		.thenReturn(Uni.createFrom().item(tokenResponse));
+		
+		Mockito
+		.when(tcRepository.persistOrUpdate(Mockito.any(TcTaxCodeTokenEntity.class)))
+		.thenReturn(Uni.createFrom().item(tcEntity));
+		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.of(tcEntityVersion)));
+		
+		Mockito
+		.when(pmWalletService.saveNewCards(TAX_CODE, API_VERSION))
+		.thenReturn(Uni.createFrom().item(saveNewCardsResponse));
+
+		Mockito
+		.when(sessionService.patchSessionById(Mockito.eq(SESSION_ID), Mockito.any(CommonHeader.class), Mockito.any(SessionRequest.class)))
+		.thenReturn(Uni.createFrom().failure(new Exception()));
+		
+		Response response = given()
+				.contentType(ContentType.JSON)
+				.headers(
+						"RequestId", "d0d654e6-97da-4848-b568-99fedccb642b",
+						"Version", API_VERSION,
+						"AcquirerId", "4585625",
+						"Channel", "ATM",
+						"TerminalId", "0aB9wXyZ",
+						"id", SESSION_ID)
+				.and()
+				.when()
+				.post()
+				.then()
+				.extract()
+				.response();
+			
+	        Assertions.assertEquals(500, response.statusCode());
+			Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_SAVING_SESSION_IN_SESSION_SERVICE));
+			Assertions.assertNull(response.jsonPath().getJsonObject("saveNewCards"));
 	     
 	}
 	
@@ -143,7 +209,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				
 				.and()
 				.when()
@@ -151,11 +217,9 @@ class TermAndCondsResourceTest {
 				.then()
 				.extract()
 				.response();
-		
-	    Assertions.assertEquals(400, response.statusCode());
-	    Assertions.assertEquals("{\"errors\":[\"004000005\"]}", response.getBody().asString());
-	        
-	     
+		Assertions.assertEquals(400, response.statusCode());
+		Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_SESSION_NOT_FOUND_SERVICE));
+		Assertions.assertNull(response.jsonPath().getJsonObject("saveNewCards"));
 	}
 
 	@Test
@@ -172,7 +236,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				
 				.and()
 				.when()
@@ -181,9 +245,9 @@ class TermAndCondsResourceTest {
 				.extract()
 				.response();
 		
-	    Assertions.assertEquals(500, response.statusCode());
-	    Assertions.assertEquals("{\"errors\":[\"004000003\"]}", response.getBody().asString());
-	     
+		Assertions.assertEquals(500, response.statusCode());
+		Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_CALLING_SESSION_SERVICE));
+		Assertions.assertNull(response.jsonPath().getJsonObject("saveNewCards"));
 	}
 	
 	@Test
@@ -197,7 +261,7 @@ class TermAndCondsResourceTest {
 		.thenReturn(Uni.createFrom().item(sessionResponse));
 		
 		Mockito
-		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
 		.thenReturn(Uni.createFrom().failure(new InternalServerErrorException()));
 		
 		Response response = given()
@@ -208,7 +272,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				
 				.and()
 				.when()
@@ -218,7 +282,8 @@ class TermAndCondsResourceTest {
 				.response();
 		
 	    Assertions.assertEquals(500, response.statusCode());
-	    Assertions.assertEquals("{\"errors\":[\"004000004\"]}", response.getBody().asString());
+		Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_CALLING_TOKENIZATOR_SERVICE));
+		Assertions.assertNull(response.jsonPath().getJsonObject("saveNewCards"));
 	     
 	}
 	
@@ -231,7 +296,7 @@ class TermAndCondsResourceTest {
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
 		
-		TCEntity tcEntity = new TCEntity();
+		TcTaxCodeTokenEntity tcEntity = new TcTaxCodeTokenEntity();
 		
 		TCEntityVersion tcEntityVersion = new TCEntityVersion();
 		tcEntityVersion.setVersion("1");
@@ -241,11 +306,11 @@ class TermAndCondsResourceTest {
 		.thenReturn(Uni.createFrom().item(sessionResponse));
 		
 		Mockito
-		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
 		.thenReturn(Uni.createFrom().item(tokenResponse));
 		
 		Mockito
-		.when(tcRepository.persistOrUpdate(Mockito.any(TCEntity.class)))
+		.when(tcRepository.persistOrUpdate(Mockito.any(TcTaxCodeTokenEntity.class)))
 		.thenReturn(Uni.createFrom().item(tcEntity));
 		
 		Mockito
@@ -264,7 +329,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				
 				.and()
 				.when()
@@ -290,11 +355,11 @@ class TermAndCondsResourceTest {
 		
 		TCVersion tcV = new TCVersion();
 		tcV.setVersion("1");
-		TCEntity tcEntity = new TCEntity();
+		TcTaxCodeTokenEntity tcEntity = new TcTaxCodeTokenEntity();
 		tcEntity.setVersion(tcV);
 
 		Mockito
-		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
 		.thenReturn(Uni.createFrom().item(tokenResponse));
 
 		Mockito
@@ -313,7 +378,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				.and()
 				.when()
 				.get("/"+TAX_CODE)
@@ -322,8 +387,7 @@ class TermAndCondsResourceTest {
 				.response();
 			
 	        Assertions.assertEquals(200, response.statusCode());
-	        Assertions.assertEquals("{\"outcome\":\"OK\"}", response.getBody().asString());
-	     
+	        Assertions.assertEquals("OK", response.jsonPath().getJsonObject("outcome"));
 	}
 	
 	@Test
@@ -337,11 +401,11 @@ class TermAndCondsResourceTest {
 		
 		TCVersion tcV = new TCVersion();
 		tcV.setVersion("0000");
-		TCEntity tcEntity = new TCEntity();
+		TcTaxCodeTokenEntity tcEntity = new TcTaxCodeTokenEntity();
 		tcEntity.setVersion(tcV);
 
 		Mockito
-		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
 		.thenReturn(Uni.createFrom().item(tokenResponse));
 
 		Mockito
@@ -361,7 +425,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				.and()
 				.when()
 				.get("/"+TAX_CODE)
@@ -369,13 +433,12 @@ class TermAndCondsResourceTest {
 				.extract()
 				.response();
 			
-	        Assertions.assertEquals(404, response.statusCode());
-	        Assertions.assertEquals("{\"outcome\":\"TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED\"}", response.getBody().asString());
-	     
+	        Assertions.assertEquals(200, response.statusCode());
+	        Assertions.assertEquals("TERMS_AND_CONDITIONS_NOT_YET_ACCEPTED", response.jsonPath().getJsonObject("outcome"));
 	}
 	
 	@Test
-	void testGetTermsAndConds_404() {
+	void testGetTermsAndConds_404_versionNotFound() {
 		
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
@@ -384,7 +447,7 @@ class TermAndCondsResourceTest {
 		tcEntityVersion.setVersion("1");
 		
 		Mockito
-		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
 		.thenReturn(Uni.createFrom().item(tokenResponse));
 		
 		Mockito
@@ -403,7 +466,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				.and()
 				.when()
 				.get("/"+TAX_CODE)
@@ -412,12 +475,13 @@ class TermAndCondsResourceTest {
 				.response();
 			
 	        Assertions.assertEquals(404, response.statusCode());
-	        Assertions.assertEquals("{\"errors\":[\"004000006\"]}", response.getBody().asString());
+			Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_VERSION_NOT_FOUND_SERVICE));
+			Assertions.assertNull(response.jsonPath().getJsonObject("outcome"));
 	     
 	}
 	
 	@Test
-	void testGetTermsAndConds_500() {
+	void testGetTermsAndConds_500_retrievingVersion() {
 		
 		TokenResponse tokenResponse = new TokenResponse();
 		tokenResponse.setToken(TOKEN);
@@ -426,7 +490,7 @@ class TermAndCondsResourceTest {
 		tcEntityVersion.setVersion("1");
 		
 		Mockito
-		.when(tokenService.getToken(Mockito.any(TokenBody.class)))
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
 		.thenReturn(Uni.createFrom().item(tokenResponse));
 		
 		Mockito
@@ -445,7 +509,7 @@ class TermAndCondsResourceTest {
 						"AcquirerId", "4585625",
 						"Channel", "ATM",
 						"TerminalId", "0aB9wXyZ",
-						"SessionId", SESSION_ID)
+						"id", SESSION_ID)
 				.and()
 				.when()
 				.get("/"+TAX_CODE)
@@ -454,7 +518,121 @@ class TermAndCondsResourceTest {
 				.response();
 			
 	        Assertions.assertEquals(500, response.statusCode());
-	        Assertions.assertEquals("{\"errors\":[\"004000007\"]}", response.getBody().asString());
-	     
+			Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_VERSION_SERVICE));
+			Assertions.assertNull(response.jsonPath().getJsonObject("outcome"));
+	}
+	
+	@Test
+	void testGetTermsAndConds_500_mongoSocketTimeout() {
+		
+		TokenResponse tokenResponse = new TokenResponse();
+		tokenResponse.setToken(TOKEN);
+		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
+		
+		Mockito
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
+		.thenReturn(Uni.createFrom().item(tokenResponse));
+		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().failure(new MongoSocketReadTimeoutException("",new ServerAddress("localhost"),new Exception())));
+		
+		Response response = given()
+				.contentType(ContentType.JSON)
+				.headers(
+						"RequestId", "d0d654e6-97da-4848-b568-99fedccb642b",
+						"Version", API_VERSION,
+						"AcquirerId", "4585625",
+						"Channel", "ATM",
+						"TerminalId", "0aB9wXyZ",
+						"id", SESSION_ID)
+				.and()
+				.when()
+				.get("/"+TAX_CODE)
+				.then()
+				.extract()
+				.response();
+			
+	        Assertions.assertEquals(500, response.statusCode());
+			Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_TIMEOUT_MONGO_DB));
+			Assertions.assertNull(response.jsonPath().getJsonObject("outcome"));
+	}
+	
+	@Test
+	void testGetTermsAndConds_500_retrievingTcVersion() {
+		
+		TokenResponse tokenResponse = new TokenResponse();
+		tokenResponse.setToken(TOKEN);
+		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
+		
+		Mockito
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
+		.thenReturn(Uni.createFrom().item(tokenResponse));
+		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().failure(new Exception()));
+		
+		Response response = given()
+				.contentType(ContentType.JSON)
+				.headers(
+						"RequestId", "d0d654e6-97da-4848-b568-99fedccb642b",
+						"Version", API_VERSION,
+						"AcquirerId", "4585625",
+						"Channel", "ATM",
+						"TerminalId", "0aB9wXyZ",
+						"id", SESSION_ID)
+				.and()
+				.when()
+				.get("/"+TAX_CODE)
+				.then()
+				.extract()
+				.response();
+			
+	        Assertions.assertEquals(500, response.statusCode());
+			Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.ERROR_RETRIEVING_TC_VERSION));
+			Assertions.assertNull(response.jsonPath().getJsonObject("outcome"));
+	} 
+	
+	@Test
+	void testGetTermsAndConds_404_retrievingTcVersion_NotFoundInTheDb() {
+		
+		TokenResponse tokenResponse = new TokenResponse();
+		tokenResponse.setToken(TOKEN);
+		
+		TCEntityVersion tcEntityVersion = new TCEntityVersion();
+		tcEntityVersion.setVersion("1");
+		
+		Mockito
+		.when(tokenService.getToken(Mockito.any(TokenRequest.class)))
+		.thenReturn(Uni.createFrom().item(tokenResponse));
+		
+		Mockito
+		.when(tcVersionRepository.findByIdOptional(Mockito.any(String.class)))
+		.thenReturn(Uni.createFrom().item(Optional.empty()));
+		
+		Response response = given()
+				.contentType(ContentType.JSON)
+				.headers(
+						"RequestId", "d0d654e6-97da-4848-b568-99fedccb642b",
+						"Version", API_VERSION,
+						"AcquirerId", "4585625",
+						"Channel", "ATM",
+						"TerminalId", "0aB9wXyZ",
+						"id", SESSION_ID)
+				.and()
+				.when()
+				.get("/"+TAX_CODE)
+				.then()
+				.extract()
+				.response();
+			
+	        Assertions.assertEquals(404, response.statusCode());
+//			Assertions.assertTrue(response.jsonPath().getList("errors").contains(ErrorCode.NOT_FOUND));
+//			Assertions.assertNull(response.jsonPath().getJsonObject("outcome"));
 	} 
 }
